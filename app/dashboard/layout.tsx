@@ -1,4 +1,3 @@
-import { createClient } from '@/lib/supabase/server'
 import { DashboardSidebar } from '@/components/dashboard/sidebar'
 import { DashboardHeader } from '@/components/dashboard/header'
 import { SidebarProvider } from '@/components/ui/sidebar'
@@ -20,26 +19,13 @@ const mockProfile = {
   daily_tasks: 'Data analysis, reporting, SQL queries, Excel modeling',
 }
 
-export default async function DashboardLayout({
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
-  const { data: { user: authUser } } = await supabase.auth.getUser()
-
-  // Use authenticated user if available, otherwise use mock data
-  const user = authUser || mockUser
-  
-  let profile = mockProfile
-  if (authUser) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', authUser.id)
-      .single()
-    if (data) profile = data
-  }
+  const user = mockUser
+  const profile = mockProfile
 
   return (
     <SidebarProvider>
