@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 import { 
   User, 
   Briefcase, 
@@ -33,6 +34,7 @@ export default function ProfilePage() {
   const [userId, setUserId] = useState<string | null>(null)
   
   const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => {
     async function loadProfile() {
@@ -98,6 +100,8 @@ export default function ProfilePage() {
       toast.error(error.message || 'Failed to update profile')
     } else {
       toast.success('Profile updated successfully')
+      // Refresh Server Components (e.g. dashboard sidebar) that read profile data.
+      router.refresh()
     }
     
     setSaving(false)
