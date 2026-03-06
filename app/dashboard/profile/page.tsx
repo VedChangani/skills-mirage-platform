@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 import { 
   User, 
   Briefcase, 
@@ -30,25 +31,48 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [email, setEmail] = useState('')
+  const [userId, setUserId] = useState<string | null>(null)
   
   const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => {
     async function loadProfile() {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
       
-      if (user) {
-        setEmail(user.email || '')
-        
-        const { data } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        
-        if (data) {
-          setProfile(data)
-        }
+      if (userError) {
+        toast.error(userError.message)
+        setLoading(false)
+        return
+      }
+
+      if (!user) {
+        setLoading(false)
+        return
+      }
+
+      setUserId(user.id)
+      setEmail(user.email || '')
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (error) {
+        toast.error(error.message)
+      } else if (data) {
+        setProfile(data)
+      } else {
+        // Profile row might not exist yet (e.g. trigger not installed). Start with an empty editable profile.
+        setProfile({
+          id: user.id,
+          job_title: null,
+          city: null,
+          years_of_experience: null,
+          daily_tasks: null,
+        })
       }
       setLoading(false)
     }
@@ -57,25 +81,27 @@ export default function ProfilePage() {
   }, [supabase])
 
   const handleSave = async () => {
-    if (!profile) return
+    if (!profile || !userId) return
     
     setSaving(true)
     
     const { error } = await supabase
       .from('profiles')
-      .update({
+      .upsert({
+        id: userId,
         job_title: profile.job_title,
         city: profile.city,
         years_of_experience: profile.years_of_experience,
         daily_tasks: profile.daily_tasks,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', profile.id)
     
     if (error) {
-      toast.error('Failed to update profile')
+      toast.error(error.message || 'Failed to update profile')
     } else {
       toast.success('Profile updated successfully')
+      // Refresh Server Components (e.g. dashboard sidebar) that read profile data.
+      router.refresh()
     }
     
     setSaving(false)
