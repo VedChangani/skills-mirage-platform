@@ -1,8 +1,24 @@
-import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardSidebar } from '@/components/dashboard/sidebar'
 import { DashboardHeader } from '@/components/dashboard/header'
 import { SidebarProvider } from '@/components/ui/sidebar'
+
+// Mock user data for development/preview
+const mockUser = {
+  id: 'mock-user-id',
+  email: 'demo@skillsmirage.io',
+  user_metadata: {
+    full_name: 'Demo Agent',
+  },
+}
+
+const mockProfile = {
+  id: 'mock-user-id',
+  job_title: 'Data Analyst',
+  city: 'San Francisco',
+  years_of_experience: 5,
+  daily_tasks: 'Data analysis, reporting, SQL queries, Excel modeling',
+}
 
 export default async function DashboardLayout({
   children,
@@ -10,18 +26,20 @@ export default async function DashboardLayout({
   children: React.ReactNode
 }) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user: authUser } } = await supabase.auth.getUser()
 
-  if (!user) {
-    redirect('/auth/login')
+  // Use authenticated user if available, otherwise use mock data
+  const user = authUser || mockUser
+  
+  let profile = mockProfile
+  if (authUser) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authUser.id)
+      .single()
+    if (data) profile = data
   }
-
-  // Fetch user profile
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
 
   return (
     <SidebarProvider>
