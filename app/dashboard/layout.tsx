@@ -1,31 +1,28 @@
 import { DashboardSidebar } from '@/components/dashboard/sidebar'
 import { DashboardHeader } from '@/components/dashboard/header'
 import { SidebarProvider } from '@/components/ui/sidebar'
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 
-// Mock user data for development/preview
-const mockUser = {
-  id: 'mock-user-id',
-  email: 'demo@skillsmirage.io',
-  user_metadata: {
-    full_name: 'Demo Agent',
-  },
-}
-
-const mockProfile = {
-  id: 'mock-user-id',
-  job_title: 'Data Analyst',
-  city: 'San Francisco',
-  years_of_experience: 5,
-  daily_tasks: 'Data analysis, reporting, SQL queries, Excel modeling',
-}
-
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const user = mockUser
-  const profile = mockProfile
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/auth/login')
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
 
   return (
     <SidebarProvider>
