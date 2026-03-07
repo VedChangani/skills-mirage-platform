@@ -121,19 +121,31 @@ function computeTopLocationFromAll(
   return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0][0]
 }
 
-/** Filter jobs in memory by user's job_title (keywords in jobtitle or skills). */
-function filterByJobTitle<T extends { jobtitle?: string | null; skills?: string | null }>(
+/**
+ * Filter jobs by logged-in user's job_title (from profiles.job_title).
+ * Matches naukri_jobs.jobtitle (and skills) against keywords from job_title.
+ * All keywords must appear in jobtitle or skills for a job to be included.
+ */
+function filterByJobTitle<T extends { jobtitle?: string | null; skills?: string | string[] | null }>(
   items: T[],
   jobTitle: string,
 ): T[] {
   const trimmed = jobTitle.trim()
-  if (!trimmed) return items
-  const keywords = trimmed.toLowerCase().split(/\s+/).filter((w) => w.length >= 2)
-  if (!keywords.length) return items
+  if (!trimmed) return []
+  const keywords = trimmed
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length >= 2)
+  if (!keywords.length) return []
   return items.filter((item) => {
-    const title = (item.jobtitle ?? '').toLowerCase()
-    const skills = (item.skills ?? '').toLowerCase()
-    return keywords.some((k) => title.includes(k) || skills.includes(k))
+    const title = (item.jobtitle ?? '').toString().toLowerCase()
+    const skillsRaw = item.skills
+    const skillsStr =
+      Array.isArray(skillsRaw)
+        ? (skillsRaw as string[]).join(' ').toLowerCase()
+        : (skillsRaw ?? '').toString().toLowerCase()
+    const searchText = `${title} ${skillsStr}`
+    return keywords.every((k) => searchText.includes(k))
   })
 }
 
