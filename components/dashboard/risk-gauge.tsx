@@ -2,9 +2,13 @@
 
 interface RiskGaugeProps {
   score: number
+  /** Optional breakdown to show real task automation, AI replacement, market saturation */
+  taskAutomation?: number
+  aiReplacement?: number
+  marketSaturation?: number
 }
 
-export function RiskGauge({ score }: RiskGaugeProps) {
+export function RiskGauge({ score, taskAutomation, aiReplacement, marketSaturation }: RiskGaugeProps) {
   // Calculate the angle for the needle (0% = -90deg, 100% = 90deg)
   const rotation = (score / 100) * 180 - 90
   
@@ -96,15 +100,15 @@ export function RiskGauge({ score }: RiskGaugeProps) {
       <div className="w-full mt-6 space-y-2">
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Task Automation</span>
-          <span className="text-foreground font-medium">72%</span>
+          <span className="text-foreground font-medium">{taskAutomation ?? 72}%</span>
         </div>
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">AI Replacement</span>
-          <span className="text-foreground font-medium">58%</span>
+          <span className="text-foreground font-medium">{aiReplacement ?? 58}%</span>
         </div>
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Market Saturation</span>
-          <span className="text-foreground font-medium">45%</span>
+          <span className="text-foreground font-medium">{marketSaturation ?? 45}%</span>
         </div>
       </div>
     </div>

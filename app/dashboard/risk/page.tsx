@@ -1,10 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { 
-  Target, 
-  AlertTriangle, 
+import {
+  Target,
+  AlertTriangle,
   Shield,
   Cpu,
   Bot,
@@ -15,6 +16,20 @@ import {
 import { RiskGauge } from '@/components/dashboard/risk-gauge'
 import { TaskRiskAnalysis } from '@/components/dashboard/task-risk-analysis'
 import { AutomationTimeline } from '@/components/dashboard/automation-timeline'
+import { fetchRiskAnalysis } from '@/lib/risk'
+
+function riskLevelToBadgeClass(level: string): string {
+  switch (level) {
+    case 'Critical':
+    case 'High':
+      return 'border-destructive/50 text-destructive'
+    case 'Medium':
+      return 'border-chart-3/50 text-chart-3'
+    case 'Low':
+    default:
+      return 'border-primary/50 text-primary'
+  }
+}
 
 export default async function RiskPage() {
   const supabase = await createClient()
@@ -26,11 +41,14 @@ export default async function RiskPage() {
     .eq('id', user?.id)
     .single()
 
-  // Mock risk data
-  const overallRisk = 65
-  const taskAutomation = 72
-  const aiReplacement = 58
-  const marketSaturation = 45
+  const admin = createAdminClient()
+  const risk = await fetchRiskAnalysis(admin, profile)
+
+  const overallRisk = risk.overallRisk
+  const taskAutomation = risk.taskAutomation
+  const aiReplacement = risk.aiReplacement
+  const marketSaturation = risk.marketSaturation
+  const riskLevel = risk.riskLevel
 
   return (
     <div className="space-y-6">
@@ -54,8 +72,8 @@ export default async function RiskPage() {
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-foreground">{overallRisk}%</span>
-              <Badge variant="outline" className="text-xs border-chart-3/50 text-chart-3">
-                Medium
+              <Badge variant="outline" className={`text-xs ${riskLevelToBadgeClass(riskLevel)}`}>
+                {riskLevel}
               </Badge>
             </div>
             <Progress value={overallRisk} className="mt-2 h-1.5" />
@@ -72,8 +90,8 @@ export default async function RiskPage() {
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-foreground">{taskAutomation}%</span>
-              <Badge variant="outline" className="text-xs border-destructive/50 text-destructive">
-                High
+              <Badge variant="outline" className={`text-xs ${taskAutomation >= 60 ? 'border-destructive/50 text-destructive' : taskAutomation >= 40 ? 'border-chart-3/50 text-chart-3' : 'border-primary/50 text-primary'}`}>
+                {taskAutomation >= 60 ? 'High' : taskAutomation >= 40 ? 'Medium' : 'Low'}
               </Badge>
             </div>
             <Progress value={taskAutomation} className="mt-2 h-1.5" />
@@ -90,8 +108,8 @@ export default async function RiskPage() {
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-foreground">{aiReplacement}%</span>
-              <Badge variant="outline" className="text-xs border-chart-3/50 text-chart-3">
-                Medium
+              <Badge variant="outline" className={`text-xs ${aiReplacement >= 60 ? 'border-destructive/50 text-destructive' : aiReplacement >= 40 ? 'border-chart-3/50 text-chart-3' : 'border-primary/50 text-primary'}`}>
+                {aiReplacement >= 60 ? 'High' : aiReplacement >= 40 ? 'Medium' : 'Low'}
               </Badge>
             </div>
             <Progress value={aiReplacement} className="mt-2 h-1.5" />
@@ -108,8 +126,8 @@ export default async function RiskPage() {
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-foreground">{marketSaturation}%</span>
-              <Badge variant="outline" className="text-xs border-primary/50 text-primary">
-                Low
+              <Badge variant="outline" className={`text-xs ${marketSaturation >= 60 ? 'border-destructive/50 text-destructive' : marketSaturation >= 40 ? 'border-chart-3/50 text-chart-3' : 'border-primary/50 text-primary'}`}>
+                {marketSaturation >= 60 ? 'High' : marketSaturation >= 40 ? 'Medium' : 'Low'}
               </Badge>
             </div>
             <Progress value={marketSaturation} className="mt-2 h-1.5" />
@@ -131,7 +149,12 @@ export default async function RiskPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <RiskGauge score={overallRisk} />
+            <RiskGauge
+              score={overallRisk}
+              taskAutomation={taskAutomation}
+              aiReplacement={aiReplacement}
+              marketSaturation={marketSaturation}
+            />
           </CardContent>
         </Card>
 
