@@ -19,6 +19,7 @@ export default async function ChatPage() {
           city: profile?.city,
           yearsOfExperience: profile?.years_of_experience,
         }}
+        chatId={user?.id ?? 'guest'}
       />
     </div>
   )

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -28,10 +29,23 @@ export default async function DashboardPage() {
     .eq('id', user?.id)
     .single()
 
-  // Mock data for the dashboard - in production, this would come from APIs/database
-  const riskScore = 65 // Automation risk score
-  const marketTrend = '+12%' // Job market trend
-  const skillsGap = 3 // Number of skills to acquire
+  const admin = createAdminClient()
+
+  const [{ count: jobsCount }, { count: naukriCount }, { count: coursesCount }] = await Promise.all([
+    admin.from('jobs').select('*', { count: 'exact', head: true }),
+    admin.from('naukri_jobs').select('*', { count: 'exact', head: true }),
+    admin.from('courses').select('*', { count: 'exact', head: true }),
+  ])
+
+  const totalPostings = (jobsCount ?? 0) + (naukriCount ?? 0)
+
+  // Keep riskScore mocked until you add a risk table/model
+  const riskScore = 65
+
+  const marketTrend = totalPostings > 0 ? `${Math.min(99, Math.round(totalPostings / 100))}%` : '0%'
+
+  // A simple “skills gap” proxy using course catalog size
+  const skillsGap = coursesCount && coursesCount > 0 ? Math.min(9, Math.ceil(coursesCount / 50)) : 3
 
   return (
     <div className="space-y-6">

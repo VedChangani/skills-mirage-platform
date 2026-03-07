@@ -4,50 +4,34 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ExternalLink, MapPin, Building2, Clock } from 'lucide-react'
 
-const jobs = [
-  {
-    id: 1,
-    title: 'Senior Software Engineer',
-    company: 'TechCorp Inc.',
-    location: 'San Francisco, CA',
-    salary: '$140k - $180k',
-    posted: '2 days ago',
-    match: 92,
-    type: 'Full-time',
-  },
-  {
-    id: 2,
-    title: 'Staff Engineer',
-    company: 'DataFlow Systems',
-    location: 'Remote',
-    salary: '$160k - $200k',
-    posted: '3 days ago',
-    match: 87,
-    type: 'Full-time',
-  },
-  {
-    id: 3,
-    title: 'Engineering Manager',
-    company: 'CloudScale',
-    location: 'New York, NY',
-    salary: '$180k - $220k',
-    posted: '5 days ago',
-    match: 78,
-    type: 'Full-time',
-  },
-  {
-    id: 4,
-    title: 'Principal Engineer',
-    company: 'AI Labs',
-    location: 'Austin, TX',
-    salary: '$200k - $250k',
-    posted: '1 week ago',
-    match: 72,
-    type: 'Full-time',
-  },
-]
+export type JobPosting = {
+  id: string | number
+  title: string
+  company: string
+  location: string
+  salary: string
+  posted: string
+  match?: number | null
+  type?: string | null
+  url?: string | null
+  details?: string[] | null
+  source?: string | null
+  sortDate?: number | null
+}
 
-export function JobPostingsTable() {
+interface JobPostingsTableProps {
+  jobs: JobPosting[]
+}
+
+export function JobPostingsTable({ jobs }: JobPostingsTableProps) {
+  if (!jobs.length) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No matching job postings found yet. Adjust your filters or check back soon.
+      </p>
+    )
+  }
+
   return (
     <div className="space-y-4">
       {jobs.map((job) => (
@@ -58,9 +42,16 @@ export function JobPostingsTable() {
           <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-center gap-3">
               <h4 className="font-medium text-foreground">{job.title}</h4>
-              <Badge variant="outline" className="text-xs">
-                {job.type}
-              </Badge>
+              {job.type && (
+                <Badge variant="outline" className="text-xs">
+                  {job.type}
+                </Badge>
+              )}
+              {job.source && (
+                <Badge variant="secondary" className="text-xs bg-muted/50">
+                  {job.source}
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
@@ -77,22 +68,49 @@ export function JobPostingsTable() {
               </span>
             </div>
             <div className="text-sm font-medium text-primary">{job.salary}</div>
+            {!!job.details?.length && (
+              <div className="text-xs text-muted-foreground line-clamp-2">
+                {job.details.filter(Boolean).join(' • ')}
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <div className="text-xs text-muted-foreground">Match Score</div>
-              <div className={`text-lg font-bold ${
-                job.match >= 85 ? 'text-primary' : 
-                job.match >= 70 ? 'text-chart-3' : 
-                'text-muted-foreground'
-              }`}>
-                {job.match}%
-              </div>
+              {typeof job.match === 'number' && (
+                <>
+                  <div className="text-xs text-muted-foreground">Match Score</div>
+                  <div
+                    className={`text-lg font-bold ${
+                      job.match >= 85
+                        ? 'text-primary'
+                        : job.match >= 70
+                          ? 'text-chart-3'
+                          : 'text-muted-foreground'
+                    }`}
+                  >
+                    {job.match}%
+                  </div>
+                </>
+              )}
             </div>
-            <Button variant="outline" size="sm" className="border-border">
-              <ExternalLink className="w-4 h-4 mr-1" />
-              View
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-border"
+              asChild={!!job.url}
+            >
+              {job.url ? (
+                <a href={job.url} target="_blank" rel="noreferrer">
+                  <ExternalLink className="w-4 h-4 mr-1" />
+                  View
+                </a>
+              ) : (
+                <>
+                  <ExternalLink className="w-4 h-4 mr-1" />
+                  View
+                </>
+              )}
             </Button>
           </div>
         </div>

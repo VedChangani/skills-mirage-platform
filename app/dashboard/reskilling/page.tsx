@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,54 +27,63 @@ export default async function ReskillingPage() {
     .eq('id', user?.id)
     .single()
 
-  // Mock reskilling paths
-  const paths = [
-    {
-      id: 1,
-      title: 'AI/ML Engineering',
-      description: 'Transition into building and deploying AI systems',
-      matchScore: 92,
-      duration: '6-9 months',
-      difficulty: 'Intermediate',
-      salaryIncrease: '+35%',
-      courses: [
-        { name: 'Machine Learning Foundations', provider: 'Coursera', duration: '3 months', completed: false },
-        { name: 'Deep Learning Specialization', provider: 'DeepLearning.AI', duration: '4 months', completed: false },
-        { name: 'MLOps: Production ML Systems', provider: 'Google Cloud', duration: '2 months', completed: false },
-      ],
-      skills: ['Python', 'TensorFlow', 'PyTorch', 'MLOps', 'Data Pipelines'],
-    },
-    {
-      id: 2,
-      title: 'Cloud Solutions Architect',
-      description: 'Design and implement cloud infrastructure',
-      matchScore: 87,
-      duration: '4-6 months',
-      difficulty: 'Intermediate',
-      salaryIncrease: '+28%',
-      courses: [
-        { name: 'AWS Solutions Architect', provider: 'AWS', duration: '3 months', completed: false },
-        { name: 'Kubernetes Administration', provider: 'Linux Foundation', duration: '2 months', completed: false },
-        { name: 'Terraform Infrastructure', provider: 'HashiCorp', duration: '1 month', completed: false },
-      ],
-      skills: ['AWS', 'Azure', 'Kubernetes', 'Terraform', 'DevOps'],
-    },
-    {
-      id: 3,
-      title: 'Data Engineering',
-      description: 'Build and maintain data pipelines and infrastructure',
-      matchScore: 84,
-      duration: '5-7 months',
-      difficulty: 'Intermediate',
-      salaryIncrease: '+25%',
-      courses: [
-        { name: 'Data Engineering with Python', provider: 'DataCamp', duration: '2 months', completed: false },
-        { name: 'Apache Spark & Big Data', provider: 'Databricks', duration: '3 months', completed: false },
-        { name: 'Data Warehouse Design', provider: 'Snowflake', duration: '2 months', completed: false },
-      ],
-      skills: ['Apache Spark', 'SQL', 'Python', 'ETL', 'Data Modeling'],
-    },
-  ]
+  const admin = createAdminClient()
+
+  type CourseRow = {
+    title: string
+    discipline: string | null
+    duration: string | null
+    url: string | null
+  }
+
+  const { data: coursesData } = await admin
+    .from('courses')
+    .select('title, discipline, duration, url')
+    .limit(300)
+
+  const courses = (coursesData ?? []) as CourseRow[]
+
+  const byDiscipline = new Map<string, CourseRow[]>()
+  for (const c of courses) {
+    const key = (c.discipline || 'General').trim() || 'General'
+    const list = byDiscipline.get(key) ?? []
+    list.push(c)
+    byDiscipline.set(key, list)
+  }
+
+  const jobTitle = (profile?.job_title || '').toLowerCase()
+  const sortedDisciplines = Array.from(byDiscipline.entries()).sort((a, b) => {
+    const aKey = a[0].toLowerCase()
+    const bKey = b[0].toLowerCase()
+    const aBoost = jobTitle && aKey.includes(jobTitle) ? 1 : 0
+    const bBoost = jobTitle && bKey.includes(jobTitle) ? 1 : 0
+    if (aBoost !== bBoost) return bBoost - aBoost
+    return (b[1].length ?? 0) - (a[1].length ?? 0)
+  })
+
+  const paths = sortedDisciplines.slice(0, 3).map(([discipline, list], idx) => {
+    const pick = list.slice(0, 5)
+    const shortCourses = pick.filter((c) => (c.duration || '').toLowerCase().includes('month') && (c.duration || '').includes('1') || (c.duration || '').includes('2') || (c.duration || '').includes('3'))
+    const matchScore = Math.min(95, 70 + Math.round((pick.length / 5) * 20))
+
+    return {
+      id: discipline || idx + 1,
+      title: discipline,
+      description: `Courses curated from your Supabase catalog for ${discipline}.`,
+      matchScore,
+      duration: 'Under 3 months',
+      difficulty: 'Beginner to Intermediate',
+      salaryIncrease: '+10% to +30%',
+      courses: pick.map((c) => ({
+        name: c.title,
+        provider: c.discipline || 'Course',
+        duration: c.duration || 'Self-paced',
+        completed: false,
+        url: c.url,
+      })),
+      skills: [],
+    }
+  })
 
   return (
     <div className="space-y-6">
@@ -204,8 +214,17 @@ export default async function ReskillingPage() {
                         </div>
                       </div>
                       <Button variant="outline" size="sm" className="border-border">
-                        Start
-                        <ArrowRight className="w-3 h-3 ml-1" />
+                        {course.url ? (
+                          <a href={course.url} target="_blank" rel="noreferrer" className="inline-flex items-center">
+                            Start
+                            <ArrowRight className="w-3 h-3 ml-1" />
+                          </a>
+                        ) : (
+                          <>
+                            Start
+                            <ArrowRight className="w-3 h-3 ml-1" />
+                          </>
+                        )}
                       </Button>
                     </div>
                   ))}

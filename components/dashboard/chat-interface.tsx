@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport } from 'ai'
+import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -24,27 +23,66 @@ interface ChatInterfaceProps {
     city?: string | null
     yearsOfExperience?: number | null
   }
+  chatId?: string
 }
 
 const suggestedPrompts = [
+  "Why is my risk score so high?",
+  "What jobs are safer for someone like me?",
+  "Show me paths that take less than 3 months.",
+  "How many BPO jobs are in Indore right now?",
+  "मुझे क्या करना चाहए?",
   "What's my biggest career risk right now?",
   "What skills should I learn next?",
   "Analyze the job market for my role",
-  "How can I reduce my automation exposure?",
 ]
 
-export function ChatInterface({ userContext }: ChatInterfaceProps) {
+type Msg = { id: string; role: 'user' | 'assistant'; content: string }
+
+export function ChatInterface({ userContext, chatId }: ChatInterfaceProps) {
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
-  
-  const { messages, sendMessage, status, error } = useChat({
-    transport: new DefaultChatTransport({ 
-      api: '/api/chat',
-      body: { userContext },
-    }),
-  })
 
-  const isLoading = status === 'streaming' || status === 'submitted'
+  const [messages, setMessages] = useState<Msg[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    // Load persistent memory from Supabase for this user (chatId == user id)
+    if (!chatId || chatId === 'guest') {
+      setMessages([])
+      return
+    }
+
+    let cancelled = false
+    const supabase = createClient()
+
+    ;(async () => {
+      const { data, error: loadError } = await supabase
+        .from('chat_messages')
+        .select('id, role, content, created_at')
+        .order('created_at', { ascending: true })
+        .limit(100)
+
+      if (cancelled) return
+      if (loadError) {
+        setError(loadError.message)
+        return
+      }
+
+      setMessages(
+        (data ?? []).map((m) => ({
+          id: `db-${m.id}`,
+          role: m.role,
+          content: m.content,
+        })),
+      )
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [chatId])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -53,15 +91,40 @@ export function ChatInterface({ userContext }: ChatInterfaceProps) {
     }
   }, [messages])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
-    sendMessage({ text: input })
+    const text = input.trim()
     setInput('')
+
+    const userMsg: Msg = { id: `${Date.now()}-u`, role: 'user', content: text }
+    setMessages((prev) => [...prev, userMsg])
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/chatbot', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ message: text, userContext }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || `Request failed (${res.status})`)
+      }
+      const data = (await res.json()) as { reply: string }
+      const assistantMsg: Msg = { id: `${Date.now()}-a`, role: 'assistant', content: data.reply }
+      setMessages((prev) => [...prev, assistantMsg])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleSuggestedPrompt = (prompt: string) => {
-    sendMessage({ text: prompt })
+    setInput(prompt)
   }
 
   return (
@@ -132,12 +195,7 @@ export function ChatInterface({ userContext }: ChatInterfaceProps) {
                     : 'bg-muted/30 border-border/50'
                 }`}>
                   <div className="text-sm whitespace-pre-wrap">
-                    {message.parts.map((part, index) => {
-                      if (part.type === 'text') {
-                        return <span key={index}>{part.text}</span>
-                      }
-                      return null
-                    })}
+                    {message.content}
                   </div>
                 </Card>
                 
@@ -175,7 +233,7 @@ export function ChatInterface({ userContext }: ChatInterfaceProps) {
               </div>
               <Card className="bg-destructive/10 border-destructive/30 p-4">
                 <p className="text-sm text-destructive">
-                  An error occurred. Please try again.
+                  {error}
                 </p>
               </Card>
             </div>

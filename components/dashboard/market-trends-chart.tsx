@@ -2,7 +2,13 @@
 
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 
-const data = [
+export type MarketTrendPoint = {
+  month: string
+  postings: number
+  hired: number
+}
+
+const defaultData: MarketTrendPoint[] = [
   { month: 'Jan', postings: 1800, hired: 1200 },
   { month: 'Feb', postings: 2100, hired: 1400 },
   { month: 'Mar', postings: 2400, hired: 1600 },
@@ -11,11 +17,16 @@ const data = [
   { month: 'Jun', postings: 3200, hired: 2200 },
 ]
 
-export function MarketTrendsChart() {
+interface MarketTrendsChartProps {
+  data?: MarketTrendPoint[]
+}
+
+export function MarketTrendsChart({ data }: MarketTrendsChartProps) {
+  const chartData = data && data.length ? data : defaultData
   return (
     <div className="h-[300px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+        <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.02 250)" vertical={false} />
           <XAxis 
             dataKey="month" 

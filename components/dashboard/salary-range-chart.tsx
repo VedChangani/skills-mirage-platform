@@ -2,7 +2,13 @@
 
 import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts'
 
-const data = [
+export type SalaryBucket = {
+  range: string
+  count: number
+  percentage: number
+}
+
+const defaultData: SalaryBucket[] = [
   { range: '$80-100k', count: 450, percentage: 15 },
   { range: '$100-120k', count: 780, percentage: 26 },
   { range: '$120-140k', count: 920, percentage: 31 },
@@ -10,12 +16,17 @@ const data = [
   { range: '$160k+', count: 310, percentage: 10 },
 ]
 
-export function SalaryRangeChart() {
+interface SalaryRangeChartProps {
+  data?: SalaryBucket[]
+}
+
+export function SalaryRangeChart({ data }: SalaryRangeChartProps) {
+  const chartData = data && data.length ? data : defaultData
   return (
     <div className="h-[300px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart 
-          data={data} 
+          data={chartData} 
           layout="vertical"
           margin={{ top: 10, right: 30, left: 20, bottom: 0 }}
         >
@@ -51,7 +62,7 @@ export function SalaryRangeChart() {
             radius={[0, 4, 4, 0]} 
             name="Postings"
           >
-            {data.map((entry, index) => (
+            {chartData.map((entry, index) => (
               <Cell 
                 key={`cell-${index}`} 
                 fill={index === 2 ? 'oklch(0.75 0.18 145)' : 'oklch(0.75 0.18 145 / 0.5)'} 
