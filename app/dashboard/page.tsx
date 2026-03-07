@@ -1,23 +1,16 @@
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  AlertTriangle, 
+import { Button } from '@/components/ui/button'
+import {
+  LayoutDashboard,
+  TrendingUp,
   Target,
-  Zap,
-  GraduationCap,
-  ArrowUpRight,
-  Activity,
-  Shield
+  Brain,
+  MessageSquare,
+  User as UserIcon,
+  ArrowRight,
 } from 'lucide-react'
-import { MarketPulseChart } from '@/components/dashboard/market-pulse-chart'
-import { RiskGauge } from '@/components/dashboard/risk-gauge'
-import { TrendingSkillsList } from '@/components/dashboard/trending-skills-list'
-import { AlertsFeed } from '@/components/dashboard/alerts-feed'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -26,199 +19,108 @@ export default async function DashboardPage() {
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
-    .eq('id', user?.id)
-    .single()
+    .eq('id', user?.id ?? '')
+    .maybeSingle()
 
-  const admin = createAdminClient()
-
-  const [{ count: jobsCount }, { count: naukriCount }, { count: coursesCount }] = await Promise.all([
-    admin.from('jobs').select('*', { count: 'exact', head: true }),
-    admin.from('naukri_jobs').select('*', { count: 'exact', head: true }),
-    admin.from('courses').select('*', { count: 'exact', head: true }),
-  ])
-
-  const totalPostings = (jobsCount ?? 0) + (naukriCount ?? 0)
-
-  // Keep riskScore mocked until you add a risk table/model
-  const riskScore = 65
-
-  const marketTrend = totalPostings > 0 ? `${Math.min(99, Math.round(totalPostings / 100))}%` : '0%'
-
-  // A simple “skills gap” proxy using course catalog size
-  const skillsGap = coursesCount && coursesCount > 0 ? Math.min(9, Math.ceil(coursesCount / 50)) : 3
+  const overviewSections = [
+    {
+      title: 'Market Signals',
+      href: '/dashboard/market',
+      icon: TrendingUp,
+      description: 'Real-time job market intelligence for your role. See active postings, hiring trends over time, average salary, and top locations.',
+      cta: 'View market',
+    },
+    {
+      title: 'Risk Analysis',
+      href: '/dashboard/risk',
+      icon: Target,
+      description: 'Understand your automation exposure. Get a risk assessment based on your role and location.',
+      cta: 'Check risk',
+    },
+    {
+      title: 'Reskilling Paths',
+      href: '/dashboard/reskilling',
+      icon: Brain,
+      description: 'Personalized learning paths aligned to your job title. See course recommendations and current vs target alignment.',
+      cta: 'Explore paths',
+    },
+    {
+      title: 'Intel Agent',
+      href: '/dashboard/chat',
+      icon: MessageSquare,
+      description: 'Chat with an AI assistant that uses your profile to answer questions about jobs, courses, risk, and career next steps.',
+      cta: 'Open chat',
+    },
+    {
+      title: 'Profile',
+      href: '/dashboard/profile',
+      icon: UserIcon,
+      description: 'Manage your job title, city, experience, and daily tasks. Your profile drives personalized insights across the platform.',
+      cta: 'Edit profile',
+    },
+  ]
 
   return (
-    <div className="space-y-6">
-      {/* Welcome Header */}
+    <div className="space-y-8">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-foreground">
-          Command Center
-        </h1>
-        <p className="text-muted-foreground">
-          Welcome back, {profile?.full_name || profile?.job_title || 'Agent'}. Here&apos;s your workforce intelligence briefing.
+        <h1 className="text-3xl font-bold text-foreground">Command Center</h1>
+        <p className="text-muted-foreground max-w-2xl">
+          Welcome back, {profile?.full_name || profile?.job_title || 'there'}. This is your overview of what the platform does and how each section helps you.
         </p>
       </div>
 
-      {/* Status Cards Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Risk Level Card */}
-        <Card className="border-border/50 bg-card/80 backdrop-blur">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Automation Risk
-            </CardTitle>
-            <Target className="h-4 w-4 text-destructive" />
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-foreground">{riskScore}%</span>
-              <Badge variant="outline" className="text-xs border-destructive/50 text-destructive">
-                <AlertTriangle className="w-3 h-3 mr-1" />
-                Medium
-              </Badge>
-            </div>
-            <Progress value={riskScore} className="mt-2 h-1.5" />
-          </CardContent>
-        </Card>
+      <Card className="border-border/50 bg-card/80 backdrop-blur border-l-4 border-l-primary">
+        <CardHeader>
+          <CardTitle className="text-foreground flex items-center gap-2">
+            <LayoutDashboard className="w-5 h-5 text-primary" />
+            What this platform does
+          </CardTitle>
+          <CardDescription className="max-w-2xl">
+            A workforce intelligence platform that helps you see job market signals for your role,
+            assess automation risk, discover reskilling paths, and get answers from an AI agent—all tailored to your profile.
+          </CardDescription>
+        </CardHeader>
+      </Card>
 
-        {/* Market Trend Card */}
-        <Card className="border-border/50 bg-card/80 backdrop-blur">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Job Market Trend
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-foreground">{marketTrend}</span>
-              <Badge variant="outline" className="text-xs border-primary/50 text-primary">
-                <ArrowUpRight className="w-3 h-3 mr-1" />
-                Growing
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              In {profile?.city || 'your area'} for similar roles
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Skills Gap Card */}
-        <Card className="border-border/50 bg-card/80 backdrop-blur">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Skills Gap
-            </CardTitle>
-            <GraduationCap className="h-4 w-4 text-chart-3" />
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-foreground">{skillsGap}</span>
-              <span className="text-sm text-muted-foreground">skills to acquire</span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              To reach 85% market alignment
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Career Shield Score */}
-        <Card className="border-border/50 bg-card/80 backdrop-blur">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Career Shield
-            </CardTitle>
-            <Shield className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-foreground">72</span>
-              <span className="text-sm text-muted-foreground">/ 100</span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Your resilience score
-            </p>
-          </CardContent>
-        </Card>
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold text-foreground">What you can do here</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          {overviewSections.map((section) => {
+            const Icon = section.icon
+            return (
+              <Card key={section.href} className="border-border/50 bg-card/80 backdrop-blur hover:border-primary/30 transition-colors">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Icon className="w-5 h-5 text-primary" />
+                    </div>
+                    <CardTitle className="text-foreground text-lg">{section.title}</CardTitle>
+                  </div>
+                  <CardDescription className="mt-1">{section.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" size="sm" className="border-primary/30 text-primary" asChild>
+                    <Link href={section.href}>
+                      {section.cta}
+                      <ArrowRight className="w-4 h-4 ml-1" />
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Market Pulse Chart - Spans 2 columns */}
-        <Card className="lg:col-span-2 border-border/50 bg-card/80 backdrop-blur">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-primary" />
-                  Market Pulse
-                </CardTitle>
-                <CardDescription>
-                  Real-time job market signals for {profile?.job_title || 'your role'}
-                </CardDescription>
-              </div>
-              <Badge variant="outline" className="border-primary/30 text-primary">
-                <Zap className="w-3 h-3 mr-1" />
-                Live
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <MarketPulseChart />
-          </CardContent>
-        </Card>
-
-        {/* Risk Gauge */}
-        <Card className="border-border/50 bg-card/80 backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-foreground flex items-center gap-2">
-              <Target className="w-5 h-5 text-destructive" />
-              Risk Assessment
-            </CardTitle>
-            <CardDescription>
-              Automation exposure analysis
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RiskGauge score={riskScore} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Bottom Row */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Trending Skills */}
-        <Card className="border-border/50 bg-card/80 backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-foreground flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              Trending Skills
-            </CardTitle>
-            <CardDescription>
-              High-demand skills in your field
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <TrendingSkillsList />
-          </CardContent>
-        </Card>
-
-        {/* Intelligence Alerts */}
-        <Card className="border-border/50 bg-card/80 backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-foreground flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-chart-3" />
-              Intelligence Alerts
-            </CardTitle>
-            <CardDescription>
-              Recent signals and notifications
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AlertsFeed />
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="border-border/50 bg-muted/20">
+        <CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground">
+            <strong className="text-foreground">Tip:</strong> Set your job title and location in{' '}
+            <Link href="/dashboard/profile" className="text-primary underline underline-offset-2">Profile</Link>
+            {' '}to get personalized market data, trends, and course recommendations everywhere else.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   )
 }

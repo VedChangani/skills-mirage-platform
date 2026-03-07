@@ -2,19 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { 
-  TrendingUp, 
-  TrendingDown,
-  MapPin,
-  Briefcase,
-  DollarSign,
-  Building2,
-  Clock,
-  ArrowUpRight
-} from 'lucide-react'
+import { TrendingUp, MapPin, Briefcase, DollarSign, ArrowUpRight } from 'lucide-react'
 import { MarketTrendsChart, type MarketTrendPoint } from '@/components/dashboard/market-trends-chart'
 import { JobPostingsTable, type JobPosting } from '@/components/dashboard/job-postings-table'
-import { SalaryRangeChart, type SalaryBucket } from '@/components/dashboard/salary-range-chart'
 
 type JobRow = {
   uniq_id: string
@@ -131,75 +121,41 @@ function computeTopLocationFromAll(
   return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0][0]
 }
 
-function buildTrendsFromJobs(jobs: JobRow[]): MarketTrendPoint[] {
-  if (!jobs.length) return []
+/** Filter jobs in memory by user's job_title (keywords in jobtitle or skills). */
+function filterByJobTitle<T extends { jobtitle?: string | null; skills?: string | null }>(
+  items: T[],
+  jobTitle: string,
+): T[] {
+  const trimmed = jobTitle.trim()
+  if (!trimmed) return items
+  const keywords = trimmed.toLowerCase().split(/\s+/).filter((w) => w.length >= 2)
+  if (!keywords.length) return items
+  return items.filter((item) => {
+    const title = (item.jobtitle ?? '').toLowerCase()
+    const skills = (item.skills ?? '').toLowerCase()
+    return keywords.some((k) => title.includes(k) || skills.includes(k))
+  })
+}
+
+/** Trends from both jobs and naukri jobs combined, by month. */
+function buildTrendsFromAll(jobs: JobRow[], naukriJobs: NaukriJobRow[]): MarketTrendPoint[] {
   const byMonth = new Map<string, { postings: number; hired: number }>()
-  for (const job of jobs) {
-    const d = job.postdate ? new Date(job.postdate) : new Date()
+  const add = (postdate?: string | null) => {
+    const d = postdate ? new Date(postdate) : new Date()
+    if (Number.isNaN(d.getTime())) return
     const month = d.toLocaleString('en-US', { month: 'short' })
     const entry = byMonth.get(month) ?? { postings: 0, hired: 0 }
     entry.postings += 1
     entry.hired += 0.6
     byMonth.set(month, entry)
   }
-  return Array.from(byMonth.entries()).map(([month, v]) => ({
-    month,
-    postings: v.postings,
-    hired: Math.round(v.hired),
-  }))
-}
-
-function buildTrendsFromAll(jobs: JobRow[], naukriJobs: NaukriJobRow[]): MarketTrendPoint[] {
-  const allPoints: { month: string; postings: number; hired: number }[] = []
-  const append = (postdate?: string | null) => {
-    const d = postdate ? new Date(postdate) : new Date()
-    const month = d.toLocaleString('en-US', { month: 'short' })
-    allPoints.push({ month, postings: 1, hired: 0 })
-  }
-  jobs.forEach((j) => append(j.postdate))
-  naukriJobs.forEach((j) => append(j.postdate))
-
-  if (!allPoints.length) return []
-  const byMonth = new Map<string, { postings: number; hired: number }>()
-  for (const p of allPoints) {
-    const entry = byMonth.get(p.month) ?? { postings: 0, hired: 0 }
-    entry.postings += 1
-    entry.hired += 0.6
-    byMonth.set(p.month, entry)
-  }
-  return Array.from(byMonth.entries()).map(([month, v]) => ({
-    month,
-    postings: v.postings,
-    hired: Math.round(v.hired),
-  }))
-}
-
-function buildSalaryBuckets(jobs: JobRow[]): SalaryBucket[] {
-  const buckets: Record<string, number> = {
-    '≤ 40k': 0,
-    '40-80k': 0,
-    '80-120k': 0,
-    '120-160k': 0,
-    '160k+': 0,
-  }
-
-  for (const job of jobs) {
-    const mid = parsePayrateToNumber(job.payrate)
-    if (mid == null) continue
-    if (mid <= 40000) buckets['≤ 40k']++
-    else if (mid <= 80000) buckets['40-80k']++
-    else if (mid <= 120000) buckets['80-120k']++
-    else if (mid <= 160000) buckets['120-160k']++
-    else buckets['160k+']++
-  }
-
-  const total = Object.values(buckets).reduce((sum, v) => sum + v, 0) || 1
-
-  return Object.entries(buckets).map(([range, count]) => ({
-    range,
-    count,
-    percentage: Math.round((count / total) * 100),
-  }))
+  jobs.forEach((j) => add(j.postdate))
+  naukriJobs.forEach((j) => add(j.postdate))
+  if (!byMonth.size) return []
+  const order: Record<string, number> = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 }
+  return Array.from(byMonth.entries())
+    .map(([month, v]) => ({ month, postings: v.postings, hired: Math.round(v.hired) }))
+    .sort((a, b) => (order[a.month] ?? 99) - (order[b.month] ?? 99))
 }
 
 export default async function MarketPage() {
@@ -209,84 +165,44 @@ export default async function MarketPage() {
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
-    .eq('id', user?.id)
-    .single()
+    .eq('id', user?.id ?? '')
+    .maybeSingle()
 
   const admin = createAdminClient()
 
   const [{ data: jobsData }, { data: naukriJobsData }] = await Promise.all([
     admin
-    .from('jobs')
-    .select(
-      `
-        uniq_id,
-        jobid,
-        jobtitle,
-        company,
-        joblocation_address,
-        payrate,
-        postdate,
-        industry,
-        experience,
-        education,
-        numberofpositions,
-        site_name,
-        skills
-      `,
-    )
-    .order('postdate', { ascending: false })
-    .limit(100),
+      .from('jobs')
+      .select(
+        `uniq_id, jobid, jobtitle, company, joblocation_address, payrate, postdate, industry, experience, education, numberofpositions, site_name, skills`,
+      )
+      .order('postdate', { ascending: false })
+      .limit(500),
     admin
       .from('naukri_jobs')
       .select(
-        `
-          id,
-          uniq_id,
-          jobtitle,
-          company,
-          stars,
-          experience,
-          location,
-          skills,
-          posted,
-          postdate,
-          site_name
-        `,
+        `id, uniq_id, jobtitle, company, stars, experience, location, skills, posted, postdate, site_name`,
       )
       .order('postdate', { ascending: false })
-      .limit(100),
+      .limit(500),
   ])
 
-  const jobs = (jobsData ?? []) as JobRow[]
-  const naukriJobs = (naukriJobsData ?? []) as NaukriJobRow[]
+  const allJobs = (jobsData ?? []) as JobRow[]
+  const allNaukriJobs = (naukriJobsData ?? []) as NaukriJobRow[]
+  const jobTitle = (profile?.job_title || '').trim()
 
-  const baseStats = computeMarketStats(jobs, profile?.city || 'San Francisco')
-  const topLocation = computeTopLocationFromAll(jobs, naukriJobs, baseStats.topLocation)
-  const marketStats = {
-    ...baseStats,
-    totalPostings: jobs.length + naukriJobs.length,
-    demandIndex: Math.min(100, 50 + jobs.length + naukriJobs.length),
-    topLocation,
-  }
+  const jobs = filterByJobTitle(allJobs, jobTitle)
+  const naukriJobs = filterByJobTitle(allNaukriJobs, jobTitle)
 
-  const jobPostingsFromJobs: JobPosting[] = jobs.map((job) => ({
-    id: job.uniq_id || job.jobid || job.jobtitle,
-    title: job.jobtitle,
-    company: job.company,
-    location: job.joblocation_address || 'Not specified',
-    salary: formatSalary(job),
-    posted: formatPostedRelative(job.postdate),
-    match: null,
-    type: null,
-    url: null,
-    source: job.site_name || 'jobs',
-    details: [job.experience || null, job.industry || null, job.education || null].filter(
-      (v): v is string => Boolean(v),
-    ),
-    sortDate: job.postdate ? new Date(job.postdate).getTime() : null,
-  }))
+  const jobsForDisplay = jobs.length > 0 || naukriJobs.length > 0 ? jobs : allJobs
+  const naukriJobsForDisplay = jobs.length > 0 || naukriJobs.length > 0 ? naukriJobs : allNaukriJobs
 
-  const jobPostingsFromNaukri: JobPosting[] = naukriJobs.map((job) => ({
+  const baseStats = computeMarketStats(jobsForDisplay, profile?.city || 'San Francisco')
+  const topLocation = computeTopLocationFromAll(jobsForDisplay, naukriJobsForDisplay, baseStats.topLocation)
+
+  // Job list: only naukri_jobs, filtered by logged-in user's job_title. No fallback to jobs table.
+  const listNaukriJobs = jobTitle ? naukriJobs : []
+  const jobPostingsFromNaukriForList: JobPosting[] = listNaukriJobs.map((job) => ({
     id: job.uniq_id || job.id,
     title: job.jobtitle,
     company: job.company,
@@ -296,19 +212,22 @@ export default async function MarketPage() {
     match: null,
     type: null,
     url: null,
-    source: job.site_name || 'naukri_jobs',
+    source: job.site_name || 'Job board',
     details: [job.skills || null, job.stars ? `⭐ ${job.stars}` : null].filter(
       (v): v is string => Boolean(v),
     ),
     sortDate: job.postdate ? new Date(job.postdate).getTime() : null,
   }))
+  const jobPostings = jobPostingsFromNaukriForList.sort((a, b) => (b.sortDate ?? 0) - (a.sortDate ?? 0))
 
-  const jobPostings: JobPosting[] = [...jobPostingsFromJobs, ...jobPostingsFromNaukri].sort(
-    (a, b) => (b.sortDate ?? 0) - (a.sortDate ?? 0),
-  )
+  const marketStats = {
+    ...baseStats,
+    totalPostings: jobsForDisplay.length + naukriJobsForDisplay.length,
+    demandIndex: Math.min(100, 50 + jobsForDisplay.length + naukriJobsForDisplay.length),
+    topLocation,
+  }
 
-  const trendsData = buildTrendsFromAll(jobs, naukriJobs)
-  const salaryBuckets = buildSalaryBuckets(jobs)
+  const trendsData = buildTrendsFromAll(jobsForDisplay, naukriJobsForDisplay)
 
   return (
     <div className="space-y-6">
@@ -339,7 +258,9 @@ export default async function MarketPage() {
                 {marketStats.postingsChange}
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">vs last month</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              {jobTitle ? `for ${profile?.job_title ?? jobTitle}` : 'vs last month'}
+            </p>
           </CardContent>
         </Card>
 
@@ -394,37 +315,34 @@ export default async function MarketPage() {
         </Card>
       </div>
 
-      {/* Charts Row */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="border-border/50 bg-card/80 backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-foreground">Job Market Trends</CardTitle>
-            <CardDescription>Monthly posting volume and hiring velocity</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MarketTrendsChart data={trendsData} />
-          </CardContent>
-        </Card>
+      <Card className="border-border/50 bg-card/80 backdrop-blur">
+        <CardHeader>
+          <CardTitle className="text-foreground">Job Market Trends</CardTitle>
+          <CardDescription>
+            {jobTitle ? `Posting volume for ${profile?.job_title ?? jobTitle} over time` : 'Posting volume over time'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MarketTrendsChart data={trendsData} />
+        </CardContent>
+      </Card>
 
-        <Card className="border-border/50 bg-card/80 backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-foreground">Salary Distribution</CardTitle>
-            <CardDescription>Salary ranges for similar positions</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SalaryRangeChart data={salaryBuckets} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Job Postings Table */}
+      {/* Job Postings: only naukri_jobs filtered by job_title; no fallback */}
       <Card className="border-border/50 bg-card/80 backdrop-blur">
         <CardHeader>
           <CardTitle className="text-foreground">Recent Job Postings</CardTitle>
-          <CardDescription>Latest opportunities matching your profile</CardDescription>
+          <CardDescription>
+            {jobTitle ? `Opportunities matching your role as ${profile?.job_title ?? jobTitle}` : 'Set your job title in Profile to see postings for your role'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <JobPostingsTable jobs={jobPostings} />
+          {jobPostings.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {jobTitle ? 'No current job postings for that role.' : 'Set your job title in your profile to see job postings for your role.'}
+            </p>
+          ) : (
+            <JobPostingsTable jobs={jobPostings} />
+          )}
         </CardContent>
       </Card>
     </div>
