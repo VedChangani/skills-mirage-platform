@@ -130,23 +130,46 @@ function filterByJobTitle<T extends { jobtitle?: string | null; skills?: string 
   items: T[],
   jobTitle: string,
 ): T[] {
-  const trimmed = jobTitle.trim()
-  if (!trimmed) return []
+  const trimmed = jobTitle.trim();
+  if (!trimmed) return [];
+
   const keywords = trimmed
     .toLowerCase()
     .split(/\s+/)
-    .filter((w) => w.length >= 2)
-  if (!keywords.length) return []
+    .filter((w) => w.length >= 2);
+
+  if (!keywords.length) return [];
+
   return items.filter((item) => {
-    const title = (item.jobtitle ?? '').toString().toLowerCase()
-    const skillsRaw = item.skills
-    const skillsStr =
-      Array.isArray(skillsRaw)
-        ? (skillsRaw as string[]).join(' ').toLowerCase()
-        : (skillsRaw ?? '').toString().toLowerCase()
-    const searchText = `${title} ${skillsStr}`
-    return keywords.every((k) => searchText.includes(k))
-  })
+    const title = (item.jobtitle ?? '').toLowerCase();
+    const skillsRaw = item.skills;
+    const skillsStr = Array.isArray(skillsRaw)
+      ? skillsRaw.join(' ').toLowerCase()
+      : (skillsRaw ?? '').toLowerCase();
+
+    // 1. Check if ALL keywords exist in the title OR skills
+    const combinedText = `${title} ${skillsStr}`;
+    const containsAllKeywords = keywords.every((k) => combinedText.includes(k));
+
+    if (!containsAllKeywords) return false;
+
+    // 2. STOPS "Python Developer" showing for "Java Developer"
+    // If the user's title mentions "Java" but the job title mentions "Python", 
+    // we reject it even if "Java" was hidden in the skills list.
+    const forbiddenLanguages = ['python', 'javascript', 'c++', 'php', 'ruby', 'go'];
+    const requestedLanguages = keywords.filter(k => forbiddenLanguages.includes(k));
+    
+    // Logic: If I asked for Java, and the Job Title says Python, exclude it.
+    const otherLanguagesFoundInTitle = forbiddenLanguages.filter(lang => 
+      title.includes(lang) && !keywords.includes(lang)
+    );
+
+    if (otherLanguagesFoundInTitle.length > 0) {
+      return false; // Reject because the Job Title is primarily for another language
+    }
+
+    return true;
+  });
 }
 
 /** Trends from both jobs and naukri jobs combined, by month. */
@@ -206,8 +229,9 @@ export default async function MarketPage() {
   const jobs = filterByJobTitle(allJobs, jobTitle)
   const naukriJobs = filterByJobTitle(allNaukriJobs, jobTitle)
 
-  const jobsForDisplay = jobs.length > 0 || naukriJobs.length > 0 ? jobs : allJobs
-  const naukriJobsForDisplay = jobs.length > 0 || naukriJobs.length > 0 ? naukriJobs : allNaukriJobs
+  // NEW CODE: If no matches found, it stays empty. No fallback.
+  const jobsForDisplay = jobs;  
+  const naukriJobsForDisplay = naukriJobs;
 
   const baseStats = computeMarketStats(jobsForDisplay, profile?.city || 'San Francisco')
   const topLocation = computeTopLocationFromAll(jobsForDisplay, naukriJobsForDisplay, baseStats.topLocation)
