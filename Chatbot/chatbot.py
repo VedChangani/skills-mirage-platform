@@ -14,6 +14,8 @@ from deep_translator import GoogleTranslator
 # Config
 # ------------------------------------------------
 st.set_page_config(page_title="Career AI", page_icon="💼", layout="centered")
+os.environ['STREAMLIT_SERVER_ENABLE_CORS'] = "false"
+os.environ['STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION'] = "false"
 st.title("💼 Career Intelligence Chatbot")
 st.caption("RAG + Query Rewriting + Tool Calling + Risk Metrics + Hindi Support")
 
@@ -27,6 +29,26 @@ GROQ_API_KEY = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY", 
 if not GROQ_API_KEY or not SUPABASE_KEY or not SUPABASE_URL:
     st.error("❌ Missing credentials. Add to Streamlit Secrets.")
     st.stop()
+
+# --- ADD THIS BLOCK ---
+# 1. Get token from URL parameters
+query_params = st.query_params
+auth_token = query_params.get("token")
+
+# 2. Check if token exists
+if not auth_token:
+    st.warning("⌛ No auth token received. Please close and reopen the chatbot panel.")
+    st.info("If this keeps happening, your session may have expired. Try logging out and back in.")
+    st.stop()
+
+# 3. Optional: Verify token with Supabase
+try:
+    # This ensures the token is actually a valid Supabase user session
+    user = supabase.auth.get_user(auth_token)
+except Exception:
+    st.error("❌ Invalid or expired session. Please log in again.")
+    st.stop()
+# ----------------------
 
 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
