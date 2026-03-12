@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { TrendingUp, MapPin, Briefcase, DollarSign, ArrowUpRight } from 'lucide-react'
 import { MarketTrendsChart, type MarketTrendPoint } from '@/components/dashboard/market-trends-chart'
 import { JobPostingsTable, type JobPosting } from '@/components/dashboard/job-postings-table'
+import { MarketSkillsTrends } from '@/components/dashboard/market-skills-trends'
 
 type JobRow = {
   uniq_id: string
@@ -193,6 +194,96 @@ function buildTrendsFromAll(jobs: JobRow[], naukriJobs: NaukriJobRow[]): MarketT
     .sort((a, b) => (order[a.month] ?? 99) - (order[b.month] ?? 99))
 }
 
+type SkillTrendInternal = {
+  name: string
+  baseShare: number
+  recentShare: number
+  delta: number
+  baseCount: number
+  recentCount: number
+}
+
+function extractSkills(raw: string | null): string[] {
+  if (!raw) return []
+  return raw
+    .split(/[,/|;]+/g)
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => s.length > 1)
+}
+
+/**
+ * Compute skill momentum using jobs (historical) vs naukri_jobs (recent),
+ * restricted to postings already filtered by the user's job_title.
+ */
+function computeSkillTrends(
+  jobs: JobRow[],
+  naukriJobs: NaukriJobRow[],
+): { trending: SkillTrendInternal[]; declining: SkillTrendInternal[] } {
+  const baseCounts = new Map<string, number>()
+  const recentCounts = new Map<string, number>()
+  let baseTotal = 0
+  let recentTotal = 0
+
+  for (const job of jobs) {
+    const skills = Array.from(new Set(extractSkills(job.skills)))
+    if (!skills.length) continue
+    baseTotal += 1
+    for (const skill of skills) {
+      baseCounts.set(skill, (baseCounts.get(skill) ?? 0) + 1)
+    }
+  }
+
+  for (const job of naukriJobs) {
+    const skills = Array.from(new Set(extractSkills(job.skills)))
+    if (!skills.length) continue
+    recentTotal += 1
+    for (const skill of skills) {
+      recentCounts.set(skill, (recentCounts.get(skill) ?? 0) + 1)
+    }
+  }
+
+  if (!baseTotal && !recentTotal) {
+    return { trending: [], declining: [] }
+  }
+
+  const allSkillNames = new Set<string>([
+    ...baseCounts.keys(),
+    ...recentCounts.keys(),
+  ])
+
+  const MIN_OCCURRENCES = 5
+  const trends: SkillTrendInternal[] = []
+
+  for (const name of allSkillNames) {
+    const baseCount = baseCounts.get(name) ?? 0
+    const recentCount = recentCounts.get(name) ?? 0
+    const totalCount = baseCount + recentCount
+    if (totalCount < MIN_OCCURRENCES) continue
+
+    const baseShare = baseTotal ? baseCount / baseTotal : 0
+    const recentShare = recentTotal ? recentCount / recentTotal : 0
+    const delta = recentShare - baseShare
+
+    if (!Number.isFinite(delta) || (baseShare === 0 && recentShare === 0)) continue
+
+    trends.push({ name, baseShare, recentShare, delta, baseCount, recentCount })
+  }
+
+  if (!trends.length) return { trending: [], declining: [] }
+
+  const trending = trends
+    .filter((t) => t.delta > 0)
+    .sort((a, b) => b.delta - a.delta)
+    .slice(0, 20)
+
+  const declining = trends
+    .filter((t) => t.delta < 0)
+    .sort((a, b) => a.delta - b.delta)
+    .slice(0, 20)
+
+  return { trending, declining }
+}
+
 export default async function MarketPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -264,6 +355,8 @@ export default async function MarketPage() {
   }
 
   const trendsData = buildTrendsFromAll(jobsForDisplay, naukriJobsForDisplay)
+  const { trending, declining } = computeSkillTrends(jobsForDisplay, naukriJobsForDisplay)
+  const skillsJobTitle = profile?.job_title ?? jobTitle
 
   return (
     <div className="space-y-6">
@@ -351,17 +444,23 @@ export default async function MarketPage() {
         </Card>
       </div>
 
-      <Card className="border-border/50 bg-card/80 backdrop-blur">
-        <CardHeader>
-          <CardTitle className="text-foreground">Job Market Trends</CardTitle>
-          <CardDescription>
-            {jobTitle ? `Posting volume for ${profile?.job_title ?? jobTitle} over time` : 'Posting volume over time'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <MarketTrendsChart data={trendsData} />
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="border-border/50 bg-card/80 backdrop-blur">
+          <CardHeader>
+            <CardTitle className="text-foreground">Job Market Trends</CardTitle>
+            <CardDescription>
+              {jobTitle
+                ? `Posting volume for ${profile?.job_title ?? jobTitle} over time`
+                : 'Posting volume over time'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MarketTrendsChart data={trendsData} />
+          </CardContent>
+        </Card>
+
+        <MarketSkillsTrends jobTitle={skillsJobTitle} trending={trending} declining={declining} />
+      </div>
 
       {/* Job Postings: only naukri_jobs filtered by job_title; no fallback */}
       <Card className="border-border/50 bg-card/80 backdrop-blur">
