@@ -124,13 +124,13 @@ export function ChatbotLauncher({ children }: ChatbotLauncherProps) {
         >
           {/* Speech bubble — only shown when panel is closed */}
           {!isOpen && (
-            <div className="relative max-w-[200px] rounded-lg rounded-br-sm border border-border bg-card px-3 py-2 shadow-md">
-              <p className="text-xs text-white leading-snug">
+            <div className="relative max-w-[240px] rounded-lg rounded-br-sm border border-border bg-card px-4 py-2.5 shadow-md">
+              <p className="text-sm text-white leading-snug">
                 Hi! I am Castor. How can I help you?
               </p>
               {/* Tail pointing toward the button */}
               <div
-                className="absolute -bottom-1.5 right-4 h-2 w-2 rotate-45 border-r border-b border-border bg-card"
+                className="absolute -bottom-1.5 right-4 h-2.5 w-2.5 rotate-45 border-r border-b border-border bg-card"
                 aria-hidden
               />
             </div>
@@ -140,16 +140,17 @@ export function ChatbotLauncher({ children }: ChatbotLauncherProps) {
             onClick={() => setIsOpen((o) => !o)}
             size="icon"
             className={cn(
-              'h-12 w-12 rounded-full shadow-lg',
-              'bg-primary text-primary-foreground hover:bg-primary/90',
+              'h-[58px] w-[58px] rounded-full shadow-lg',
+              'text-white',
               'transition-all hover:scale-105'
             )}
+            style={{ backgroundColor: '#9F00FF' }}
             aria-label={isOpen ? 'Close chatbot' : 'Open chatbot'}
           >
             {isOpen ? (
-              <X className="h-5 w-5" />
+              <X className="h-6 w-6" />
             ) : (
-              <MessageSquare className="h-5 w-5" />
+              <MessageSquare className="h-6 w-6" />
             )}
           </Button>
         </div>
