@@ -30,28 +30,59 @@ if not GROQ_API_KEY or not SUPABASE_KEY or not SUPABASE_URL:
     st.error("❌ Missing credentials. Add to Streamlit Secrets.")
     st.stop()
 
-# --- ADD THIS BLOCK ---
-# 1. Get token from URL parameters
+# ------------------------------------------------
+# Supabase + LLM clients (must be created BEFORE auth check)
+# ------------------------------------------------
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
+
+# ------------------------------------------------
+# Auth: get token from URL params and verify user
+# ------------------------------------------------
 query_params = st.query_params
 auth_token = query_params.get("token")
 
-# 2. Check if token exists
 if not auth_token:
     st.warning("⌛ No auth token received. Please close and reopen the chatbot panel.")
     st.info("If this keeps happening, your session may have expired. Try logging out and back in.")
     st.stop()
 
-# 3. Optional: Verify token with Supabase
 try:
-    # This ensures the token is actually a valid Supabase user session
-    user = supabase.auth.get_user(auth_token)
+    user_response = supabase.auth.get_user(auth_token)
+    current_user_id = user_response.user.id
 except Exception:
     st.error("❌ Invalid or expired session. Please log in again.")
     st.stop()
-# ----------------------
 
-llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Store user_id in session state for use across reruns
+st.session_state["user_id"] = current_user_id
+
+# ------------------------------------------------
+# Chat History Persistence
+# ------------------------------------------------
+def load_chat_history(user_id: str, limit: int = 50):
+    """Load the most recent chat messages for this user from Supabase."""
+    try:
+        res = supabase.table("chat_history") \
+            .select("role, message, created_at") \
+            .eq("user_id", user_id) \
+            .order("created_at", desc=False) \
+            .limit(limit) \
+            .execute()
+        return [{"role": row["role"], "content": row["message"]} for row in (res.data or [])]
+    except Exception:
+        return []
+
+def save_chat_message(user_id: str, role: str, message: str):
+    """Save a single chat message to Supabase."""
+    try:
+        supabase.table("chat_history").insert({
+            "user_id": user_id,
+            "role": role,
+            "message": message
+        }).execute()
+    except Exception:
+        pass  # Silently fail — don't break chat for a persistence error
 
 # ------------------------------------------------
 # TABLE SCHEMA
@@ -917,7 +948,9 @@ with st.expander("🔧 Debug Panel"):
 # CHAT UI
 # ================================================
 if "messages" not in st.session_state:
-    st.session_state.messages = [{
+    # Load previous chat history from Supabase for this user
+    saved_messages = load_chat_history(st.session_state["user_id"])
+    greeting = {
         "role": "assistant",
         "content": (
             "👋 Hi! I'm your Career Intelligence Assistant.\n\n"
@@ -931,7 +964,11 @@ if "messages" not in st.session_state:
             "- 🇮🇳 **Hindi** — *मुझे नौकरी ढूंढने में मदद करो* 🙏\n\n"
             f"{'✅ RAG Active — ' + str(result) + ' jobs indexed' if vector_store else '⚠️ RAG not available'}"
         )
-    }]
+    }
+    if saved_messages:
+        st.session_state.messages = [greeting] + saved_messages
+    else:
+        st.session_state.messages = [greeting]
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
@@ -940,6 +977,7 @@ if prompt := st.chat_input("Ask about jobs, skills, salaries, risk score..."):
 
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
+    save_chat_message(st.session_state["user_id"], "user", prompt)
 
     is_hindi = bool(re.search("[\u0900-\u097F]", prompt))
     processing_prompt = translate_to_english(prompt) if is_hindi else prompt
@@ -954,6 +992,7 @@ if prompt := st.chat_input("Ask about jobs, skills, salaries, risk score..."):
     if risk_answer:
         st.session_state.messages.append({"role": "assistant", "content": risk_answer})
         st.chat_message("assistant").write(risk_answer)
+        save_chat_message(st.session_state["user_id"], "assistant", risk_answer)
 
     # ── Priority 2: RAG — semantic + follow-up
     elif should_use_rag(processing_prompt) and vector_store:
@@ -971,6 +1010,7 @@ if prompt := st.chat_input("Ask about jobs, skills, salaries, risk score..."):
 
         st.session_state.messages.append({"role": "assistant", "content": answer})
         st.chat_message("assistant").write(answer)
+        save_chat_message(st.session_state["user_id"], "assistant", answer)
 
     # ── Priority 3: Tool calling — structured queries
     else:
@@ -995,3 +1035,4 @@ if prompt := st.chat_input("Ask about jobs, skills, salaries, risk score..."):
 
         st.session_state.messages.append({"role": "assistant", "content": answer})
         st.chat_message("assistant").write(answer)
+        save_chat_message(st.session_state["user_id"], "assistant", answer)
